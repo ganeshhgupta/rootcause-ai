@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: rootcause-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.1-8b-instant
+      - key: UPSTASH_REDIS_URL
+        sync: false
+      - key: LANGCHAIN_API_KEY
+        sync: false
+      - key: LANGCHAIN_TRACING_V2
+        value: "true"
+      - key: LANGCHAIN_PROJECT
+        value: rootcause-ai
+      - key: SIMULATOR_URL
+        value: https://rootcause-simulator.onrender.com
+      - key: ANOMALY_HITL_THRESHOLD
+        value: "0.8"
+      - key: ALLOWED_ORIGINS
+        value: "https://rootcause-ai.vercel.app"
+
+  - type: web
+    name: rootcause-simulator
+    runtime: docker
+    dockerfilePath: ./simulator/Dockerfile
+    dockerContext: ./simulator
+    envVars:
+      - key: UPSTASH_REDIS_URL
+        sync: false
