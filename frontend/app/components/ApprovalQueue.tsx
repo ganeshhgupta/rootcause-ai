@@ -1,22 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle, XCircle, Clock, AlertTriangle, RefreshCw } from "lucide-react";
 import { getPendingApprovals, approveplan, rejectPlan } from "@/lib/api";
 import type { PendingApproval } from "@/lib/types";
 
 export function ApprovalQueue() {
   const [items, setItems] = useState<PendingApproval[]>([]);
-  const [loading, setLoading] = useState(false);
   const [acting, setActing] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
 
   const refresh = () => {
-    setLoading(true);
-    getPendingApprovals()
-      .then((r) => setItems(r.pending))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    getPendingApprovals().then((r) => setItems(r.pending)).catch(() => {});
   };
 
   useEffect(() => {
@@ -35,9 +29,9 @@ export function ApprovalQueue() {
     setItems((p) => p.filter((x) => x.plan_id !== planId));
     try {
       await approveplan(planId);
-      showToast("Action approved and executed", true);
+      showToast("Approved & executed", true);
     } catch {
-      showToast("Approval failed — check backend", false);
+      showToast("Approval failed", false);
       refresh();
     } finally {
       setActing(null);
@@ -49,7 +43,7 @@ export function ApprovalQueue() {
     setItems((p) => p.filter((x) => x.plan_id !== planId));
     try {
       await rejectPlan(planId);
-      showToast("Action rejected", false);
+      showToast("Rejected", false);
     } catch {
       refresh();
     } finally {
@@ -58,79 +52,72 @@ export function ApprovalQueue() {
   };
 
   return (
-    <div className="relative">
+    <div className="relative flex flex-col h-full">
       {/* Toast */}
       {toast && (
-        <div className={`absolute -top-8 left-0 right-0 text-xs px-3 py-1.5 rounded font-mono z-10 flex items-center gap-2
-          ${toast.ok ? "bg-emerald-900/80 text-emerald-300 border border-emerald-700" : "bg-red-900/80 text-red-300 border border-red-700"}`}>
-          {toast.ok ? <CheckCircle size={11} /> : <XCircle size={11} />}
+        <div className={`absolute -top-6 inset-x-0 text-[10px] font-mono px-2 py-1 rounded z-10 ${
+          toast.ok ? "bg-emerald-900/70 text-emerald-300" : "bg-red-900/70 text-red-300"
+        }`}>
           {toast.msg}
         </div>
       )}
 
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <AlertTriangle size={13} className="text-amber-400" />
-          <span className="text-xs font-semibold uppercase tracking-widest text-slate-300">Approval Queue</span>
-          {items.length > 0 && (
-            <span className="text-[10px] bg-red-900/60 text-red-400 border border-red-700/40 px-1.5 py-0.5 rounded font-mono">
-              {items.length}
-            </span>
-          )}
-        </div>
-        <button onClick={refresh} className="text-slate-600 hover:text-slate-400 transition-colors">
-          <RefreshCw size={11} className={loading ? "animate-spin" : ""} />
-        </button>
+        <span className="text-[9px] font-mono uppercase tracking-widest text-slate-600">Approval Queue</span>
+        {items.length > 0 && (
+          <span className="text-[9px] font-mono bg-red-900/40 text-red-400 border border-red-700/30 px-1.5 rounded">
+            {items.length} PENDING
+          </span>
+        )}
       </div>
 
-      <div className="space-y-2 max-h-72 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto space-y-2">
         {items.length === 0 && (
-          <div className="text-center py-6 text-slate-700 text-xs font-mono">
+          <div className="text-center py-6 text-slate-700 text-[10px] font-mono">
             No pending approvals
           </div>
         )}
         {items.map((item) => (
-          <div
-            key={item.plan_id}
-            className="rounded-lg border border-amber-700/30 bg-amber-950/10 p-3"
-          >
+          <div key={item.plan_id}
+            className="rounded-lg border border-amber-700/25 bg-gradient-to-b from-amber-950/10 to-transparent p-3">
+            {/* Header */}
             <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <Clock size={11} className="text-amber-400" />
-                <span className="text-xs font-mono font-semibold text-amber-300">{item.node_id}</span>
-              </div>
-              <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border
-                ${item.severity === "CRITICAL"
-                  ? "bg-red-900/40 text-red-400 border-red-700/40"
-                  : "bg-orange-900/40 text-orange-400 border-orange-700/40"}`}>
-                {item.severity}
-              </span>
+              <span className="font-mono text-[11px] font-semibold text-amber-300">{item.node_id}</span>
+              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded font-mono ${
+                item.severity === "CRITICAL"
+                  ? "sev-CRITICAL"
+                  : "sev-HIGH"
+              }`}>{item.severity}</span>
             </div>
 
-            <div className="text-[10px] font-mono text-slate-500 mb-1 space-y-0.5">
-              <div><span className="text-slate-600">ACTION </span><span className="text-slate-300 uppercase">{item.action_type}</span></div>
-              <div><span className="text-slate-600">CONFIDENCE </span><span className="text-slate-300">{(item.confidence * 100).toFixed(0)}%</span></div>
-              <div className="text-slate-700 truncate">{JSON.stringify(item.parameters)}</div>
+            {/* Plan details */}
+            <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[9px] font-mono mb-2">
+              <span className="text-slate-600">ACTION</span>
+              <span className="text-blue-400 uppercase">{item.action_type}</span>
+              <span className="text-slate-600">CONFIDENCE</span>
+              <span className="text-slate-400">{(item.confidence * 100).toFixed(0)}%</span>
+              <span className="text-slate-600">ANOMALY</span>
+              <span className="text-slate-400">{(item.anomaly_score * 100).toFixed(0)}%</span>
             </div>
 
-            <div className="flex gap-2 mt-2">
-              <button
-                onClick={() => handleApprove(item.plan_id)}
-                disabled={acting === item.plan_id}
-                className="flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold py-1.5 rounded
-                  bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-400 border border-emerald-700/40
-                  transition-colors disabled:opacity-40"
-              >
-                <CheckCircle size={10} /> APPROVE
+            {/* Params */}
+            <div className="bg-[#070d1a] rounded p-1.5 mb-2 text-[8px] font-mono text-slate-600 truncate">
+              {JSON.stringify(item.parameters)}
+            </div>
+
+            {/* Buttons */}
+            <div className="flex gap-1.5">
+              <button onClick={() => handleApprove(item.plan_id)} disabled={acting === item.plan_id}
+                className="flex-1 py-1.5 rounded text-[9px] font-semibold font-mono
+                  bg-emerald-900/30 hover:bg-emerald-800/50 text-emerald-400
+                  border border-emerald-700/30 transition-colors disabled:opacity-40">
+                ✓ APPROVE
               </button>
-              <button
-                onClick={() => handleReject(item.plan_id)}
-                disabled={acting === item.plan_id}
-                className="flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold py-1.5 rounded
-                  bg-red-900/30 hover:bg-red-800/50 text-red-400 border border-red-700/40
-                  transition-colors disabled:opacity-40"
-              >
-                <XCircle size={10} /> REJECT
+              <button onClick={() => handleReject(item.plan_id)} disabled={acting === item.plan_id}
+                className="flex-1 py-1.5 rounded text-[9px] font-semibold font-mono
+                  bg-red-900/20 hover:bg-red-900/40 text-red-400
+                  border border-red-700/25 transition-colors disabled:opacity-40">
+                ✕ REJECT
               </button>
             </div>
           </div>

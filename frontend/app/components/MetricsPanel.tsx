@@ -1,117 +1,135 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Activity, BarChart2, Clock, Shield } from "lucide-react";
+import { useMemo } from "react";
 import type { LiveEvent } from "@/lib/types";
 
-interface Props {
-  events: LiveEvent[];
-}
+interface Props { events: LiveEvent[]; }
 
-function Sparkline({ values, color }: { values: number[]; color: string }) {
-  if (values.length < 2) return <div className="h-8 opacity-20 bg-slate-800 rounded" />;
-  const max = Math.max(...values) || 1;
+function MiniSparkline({ values, color, height = 28 }: { values: number[]; color: string; height?: number }) {
+  if (values.length < 2) return <div style={{ height }} className="rounded opacity-10 bg-slate-700" />;
+  const max = Math.max(...values);
   const min = Math.min(...values);
-  const range = max - min || 1;
-  const w = 80;
-  const h = 32;
-  const pts = values.slice(-20).map((v, i, arr) => {
-    const x = (i / (arr.length - 1)) * w;
-    const y = h - ((v - min) / range) * (h - 4) - 2;
+  const range = (max - min) || 1;
+  const W = 100;
+  const H = height;
+  const pts = values.slice(-24).map((v, i, a) => {
+    const x = (i / (a.length - 1)) * W;
+    const y = H - ((v - min) / range) * (H - 4) - 2;
     return `${x},${y}`;
   });
+  const area = `M0,${H} L${pts.join(" L")} L${W},${H} Z`;
   return (
-    <svg width={w} height={h} className="opacity-70">
-      <polyline
-        points={pts.join(" ")}
-        fill="none"
-        stroke={color}
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+    <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+      <defs>
+        <linearGradient id={`grad-${color.replace("#","")}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.3"/>
+          <stop offset="100%" stopColor={color} stopOpacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d={area} fill={`url(#grad-${color.replace("#","")})`} />
+      <polyline points={pts.join(" ")} fill="none" stroke={color} strokeWidth="1.5"
+        strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function GaugeMini({ pct, color }: { pct: number; color: string }) {
+  const r = 22;
+  const circ = Math.PI * r;
+  const offset = circ * (1 - Math.min(1, pct / 100));
+  return (
+    <svg width="56" height="32" viewBox="0 0 56 34">
+      <path d={`M4,32 A${r},${r} 0 0,1 52,32`} fill="none" stroke="#1a2d4a" strokeWidth="4" strokeLinecap="round"/>
+      <path d={`M4,32 A${r},${r} 0 0,1 52,32`} fill="none" stroke={color} strokeWidth="4"
+        strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={offset}
+        style={{ transition: "stroke-dashoffset 0.8s ease" }}/>
+      <text x="28" y="30" textAnchor="middle" fontSize="8" fill={color} fontFamily="JetBrains Mono,monospace">
+        {pct.toFixed(0)}%
+      </text>
     </svg>
   );
 }
 
 export function MetricsPanel({ events }: Props) {
-  const [latencies, setLatencies] = useState<number[]>([]);
-  const [anomalyRates, setAnomalyRates] = useState<number[]>([]);
-  const [autoRatios, setAutoRatios] = useState<number[]>([]);
-
-  useEffect(() => {
-    if (events.length === 0) return;
-    const recent = events.slice(0, 50);
+  const stats = useMemo(() => {
+    const total = events.length;
+    const recent = events.slice(0, 100);
     const highCount = recent.filter((e) => e.severity === "HIGH" || e.severity === "CRITICAL").length;
-    const anomalyRate = (highCount / recent.length) * 100;
-    const autoCount = recent.filter((e) => !e.requires_approval).length;
-    const autoRatio = (autoCount / recent.length) * 100;
+    const anomalyRate = recent.length > 0 ? (highCount / recent.length) * 100 : 0;
+    const autoCount = recent.filter((e) => !e.requires_approval && e.action_type).length;
+    const pendingCount = recent.filter((e) => e.requires_approval).length;
+    const critCount = recent.filter((e) => e.severity === "CRITICAL").length;
+    return { total, anomalyRate, autoCount, pendingCount, critCount };
+  }, [events]);
 
-    setAnomalyRates((p) => [...p, anomalyRate].slice(-20));
-    setAutoRatios((p) => [...p, autoRatio].slice(-20));
-    setLatencies((p) => [...p, events.length * 1.2].slice(-20)); // placeholder trend
-  }, [events.length]);
+  // Build sparkline history over last 20 events
+  const anomalyHistory = useMemo(() => {
+    const windows: number[] = [];
+    for (let i = 0; i < Math.min(events.length, 120); i += 6) {
+      const slice = events.slice(i, i + 6);
+      const rate = slice.filter((e) => e.severity !== "LOW").length / Math.max(slice.length, 1) * 100;
+      windows.unshift(rate);
+    }
+    return windows;
+  }, [events]);
 
-  const totalEvents = events.length;
-  const recentSlice = events.slice(0, 50);
-  const highCount = recentSlice.filter((e) => e.severity === "HIGH" || e.severity === "CRITICAL").length;
-  const anomalyRate = recentSlice.length > 0 ? ((highCount / recentSlice.length) * 100).toFixed(1) : "0.0";
-  const autoCount = recentSlice.filter((e) => !e.requires_approval).length;
-  const pendingCount = recentSlice.filter((e) => e.requires_approval).length;
-
-  const stats = [
-    {
-      label: "Events Processed",
-      value: totalEvents.toLocaleString(),
-      sub: "total this session",
-      icon: <Activity size={14} className="text-blue-400" />,
-      color: "#60a5fa",
-      sparkData: latencies,
-    },
-    {
-      label: "Anomaly Rate",
-      value: `${anomalyRate}%`,
-      sub: "HIGH + CRITICAL",
-      icon: <BarChart2 size={14} className="text-orange-400" />,
-      color: "#fb923c",
-      sparkData: anomalyRates,
-    },
-    {
-      label: "Auto-Remediated",
-      value: autoCount.toString(),
-      sub: "no human needed",
-      icon: <Shield size={14} className="text-emerald-400" />,
-      color: "#34d399",
-      sparkData: autoRatios,
-    },
-    {
-      label: "Pending Approval",
-      value: pendingCount.toString(),
-      sub: "awaiting operator",
-      icon: <Clock size={14} className="text-amber-400" />,
-      color: "#fbbf24",
-      sparkData: autoRatios.map((v) => 100 - v),
-    },
+  const agentStates = [
+    { label: "MONITOR",     color: "#3b82f6", active: events.length > 0 },
+    { label: "DIAGNOSIS",   color: "#8b5cf6", active: events.length > 0 },
+    { label: "REMEDIATION", color: "#f59e0b", active: events.filter(e => e.action_type).length > 0 },
   ];
 
   return (
-    <div>
-      <div className="flex items-center gap-2 mb-3">
-        <BarChart2 size={13} className="text-amber-400" />
-        <span className="text-xs font-semibold uppercase tracking-widest text-slate-300">Performance Telemetry</span>
-      </div>
+    <div className="space-y-4">
+      {/* KPI row */}
       <div className="grid grid-cols-2 gap-2">
-        {stats.map((s) => (
-          <div key={s.label} className="rounded-lg border border-navy-700 bg-navy-900 p-3">
+        {[
+          { label: "Events Processed", value: stats.total.toLocaleString(), color: "#3b82f6", icon: "▶" },
+          { label: "Anomaly Rate",     value: `${stats.anomalyRate.toFixed(1)}%`, color: "#f97316", icon: "△" },
+          { label: "Auto-Remediated",  value: stats.autoCount.toString(),         color: "#10b981", icon: "✓" },
+          { label: "Pending Approval", value: stats.pendingCount.toString(),       color: "#f59e0b", icon: "⏱" },
+        ].map((k) => (
+          <div key={k.label} className="card-sm p-3">
             <div className="flex items-center justify-between mb-1">
-              {s.icon}
-              <Sparkline values={s.sparkData} color={s.color} />
+              <span className="text-[10px]" style={{ color: k.color }}>{k.icon}</span>
+              <GaugeMini pct={k.label === "Anomaly Rate" ? stats.anomalyRate : k.label === "Pending Approval" ? Math.min(100, stats.pendingCount * 10) : 100} color={k.color} />
             </div>
-            <div className="text-xl font-bold font-mono text-white">{s.value}</div>
-            <div className="text-[10px] text-slate-500 uppercase tracking-wide">{s.label}</div>
-            <div className="text-[9px] text-slate-700 mt-0.5">{s.sub}</div>
+            <div className="font-mono text-xl font-bold text-white">{k.value}</div>
+            <div className="text-[9px] text-slate-600 uppercase tracking-wide">{k.label}</div>
           </div>
         ))}
+      </div>
+
+      {/* Anomaly trend sparkline */}
+      <div className="card-sm p-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[9px] font-mono uppercase tracking-widest text-slate-600">Anomaly Trend</span>
+          <span className="font-mono text-[10px]" style={{ color: "#f97316" }}>{stats.anomalyRate.toFixed(1)}%</span>
+        </div>
+        <MiniSparkline values={anomalyHistory.length > 0 ? anomalyHistory : [0]} color="#f97316" height={36} />
+      </div>
+
+      {/* Agent activity loop */}
+      <div className="card-sm p-3">
+        <div className="text-[9px] font-mono uppercase tracking-widest text-slate-600 mb-3">Agent Activity Loop</div>
+        <div className="space-y-2">
+          {agentStates.map((a) => (
+            <div key={a.label} className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full" style={{
+                background: a.active ? a.color : "#1a2d4a",
+                boxShadow: a.active ? `0 0 6px ${a.color}` : "none",
+                animation: a.active ? "pulse-sev 2s infinite" : undefined,
+              }} />
+              <span className="font-mono text-[10px]" style={{ color: a.active ? a.color : "#334155" }}>
+                {a.label}
+              </span>
+              <div className="flex-1 h-px" style={{ background: a.active ? `${a.color}30` : "#1a2d4a" }} />
+              <span className="text-[9px] font-mono" style={{ color: a.active ? "#10b981" : "#334155" }}>
+                {a.active ? "ACTIVE" : "IDLE"}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

@@ -2,40 +2,77 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap");
 
-:root {
-  --navy-950: #060b18;
-  --navy-900: #0a1628;
-  --navy-800: #0f2040;
-  --amber: #f59e0b;
-  --green: #10b981;
-  --red: #ef4444;
-  --orange: #f97316;
-}
+* { box-sizing: border-box; }
 
 body {
-  background-color: var(--navy-950);
-  color: #e2e8f0;
-  font-family: "Inter", sans-serif;
+  background-color: #070d1a;
+  color: #c8d8f0;
+  font-family: "Inter", -apple-system, sans-serif;
+  font-size: 13px;
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: #0a1628; }
-::-webkit-scrollbar-thumb { background: #1e3a6e; border-radius: 2px; }
+/* ── Scrollbars ── */
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #1e3358; border-radius: 2px; }
 
-/* Severity badge colors */
-.severity-LOW    { @apply bg-slate-700 text-slate-300; }
-.severity-MEDIUM { @apply bg-yellow-900/60 text-yellow-400; }
-.severity-HIGH   { @apply bg-orange-900/60 text-orange-400; }
-.severity-CRITICAL { @apply bg-red-900/60 text-red-400 animate-pulse; }
-
-/* NOC grid glow */
-.glow-amber { box-shadow: 0 0 20px rgba(245,158,11,0.15); }
-.glow-red   { box-shadow: 0 0 20px rgba(239,68,68,0.2); }
-.glow-green { box-shadow: 0 0 12px rgba(16,185,129,0.15); }
-
+/* ── Cards ── */
 .card {
-  @apply bg-navy-900 border border-navy-700 rounded-lg;
+  background: linear-gradient(135deg, #0d1b30 0%, #091524 100%);
+  border: 1px solid #1a2d4a;
+  border-radius: 12px;
 }
+.card-sm {
+  background: linear-gradient(135deg, #0f1e33 0%, #0a1828 100%);
+  border: 1px solid #172843;
+  border-radius: 8px;
+}
+
+/* ── Severity ── */
+.sev-LOW      { color: #64748b; background: rgba(100,116,139,.12); border: 1px solid rgba(100,116,139,.25); }
+.sev-MEDIUM   { color: #eab308; background: rgba(234,179,8,.1); border: 1px solid rgba(234,179,8,.25); }
+.sev-HIGH     { color: #f97316; background: rgba(249,115,22,.1); border: 1px solid rgba(249,115,22,.25); }
+.sev-CRITICAL { color: #ef4444; background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.3); animation: pulse-sev 2s infinite; }
+
+@keyframes pulse-sev {
+  0%,100% { opacity:1; } 50% { opacity:.7; }
+}
+
+/* ── Node glow rings ── */
+.node-healthy  { filter: drop-shadow(0 0 4px #10b98166); }
+.node-medium   { filter: drop-shadow(0 0 6px #eab30888); }
+.node-high     { filter: drop-shadow(0 0 8px #f9731688); }
+.node-critical { filter: drop-shadow(0 0 12px #ef444499); animation: node-pulse 1.5s infinite; }
+
+@keyframes node-pulse {
+  0%,100% { filter: drop-shadow(0 0 12px #ef4444aa); }
+  50%      { filter: drop-shadow(0 0 20px #ef4444ff); }
+}
+
+/* ── Slide-in animation ── */
+@keyframes slideIn {
+  from { opacity:0; transform:translateY(-6px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+.animate-slide-in { animation: slideIn .25s ease-out; }
+
+/* ── Grid line bg ── */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(30,51,88,.3) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(30,51,88,.3) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* ── Metric number ── */
+.metric-value { font-family: "JetBrains Mono", monospace; }
+
+/* ── Table row hover ── */
+.trow { transition: background .12s; }
+.trow:hover { background: rgba(30,51,88,.4); }
+
+/* ── Gauge arc ── */
+.gauge-track { stroke: #1a2d4a; }
+.gauge-fill  { transition: stroke-dashoffset .8s ease; }
