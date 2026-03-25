@@ -1,9 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import type { LiveEvent, Severity } from "@/lib/types";
+import type { LiveEvent } from "@/lib/types";
 
-// Static layout positions for 20 nodes in 3 tiers
 const NODE_LAYOUT: Record<string, { x: number; y: number; tier: "core" | "edge" | "dist" }> = {
   "node-core-01": { x: 120, y: 60,  tier: "core" },
   "node-core-02": { x: 220, y: 40,  tier: "core" },
@@ -27,36 +26,39 @@ const NODE_LAYOUT: Record<string, { x: number; y: number; tier: "core" | "edge" 
   "node-dist-05": { x: 600, y: 270, tier: "dist" },
 };
 
-// Static edges
 const EDGES: [string, string][] = [
   ["node-core-01","node-edge-01"],["node-core-01","node-edge-02"],
   ["node-core-02","node-edge-02"],["node-core-02","node-edge-03"],["node-core-02","node-edge-04"],
   ["node-core-03","node-edge-04"],["node-core-03","node-edge-05"],["node-core-03","node-edge-06"],
   ["node-core-04","node-edge-06"],["node-core-04","node-edge-07"],["node-core-04","node-edge-08"],
   ["node-core-05","node-edge-08"],["node-core-05","node-edge-09"],["node-core-05","node-edge-10"],
-  // Core ring
   ["node-core-01","node-core-02"],["node-core-02","node-core-03"],
   ["node-core-03","node-core-04"],["node-core-04","node-core-05"],
-  // Edge → dist
   ["node-edge-01","node-dist-01"],["node-edge-02","node-dist-01"],["node-edge-02","node-dist-02"],
   ["node-edge-03","node-dist-02"],["node-edge-04","node-dist-02"],["node-edge-05","node-dist-03"],
   ["node-edge-06","node-dist-03"],["node-edge-06","node-dist-04"],["node-edge-07","node-dist-04"],
   ["node-edge-08","node-dist-04"],["node-edge-09","node-dist-05"],["node-edge-10","node-dist-05"],
 ];
 
-const SEV_COLOR: Record<Severity | "healthy", string> = {
-  healthy:  "#10b981",
-  LOW:      "#10b981",
-  MEDIUM:   "#eab308",
-  HIGH:     "#f97316",
-  CRITICAL: "#ef4444",
-};
+function sevColor(sev: string): string {
+  if (sev === "CRITICAL") return "#ef4444";
+  if (sev === "HIGH")     return "#f97316";
+  if (sev === "MEDIUM")   return "#eab308";
+  return "#10b981"; // LOW or healthy
+}
 
 const TIER_RING: Record<string, string> = {
   core: "#3b82f6",
   edge: "#8b5cf6",
   dist: "#06b6d4",
 };
+
+const LEGEND = [
+  { label: "healthy", color: "#10b981" },
+  { label: "MEDIUM",  color: "#eab308" },
+  { label: "HIGH",    color: "#f97316" },
+  { label: "CRITICAL",color: "#ef4444" },
+];
 
 interface Props {
   events: LiveEvent[];
@@ -65,8 +67,7 @@ interface Props {
 
 export function NetworkTopology({ events, onSelectNode }: Props) {
   const nodeStatus = useMemo(() => {
-    const map: Record<string, Severity> = {};
-    // Use the most recent event per node
+    const map: Record<string, string> = {};
     for (const ev of [...events].reverse()) {
       if (!map[ev.node_id]) map[ev.node_id] = ev.severity;
     }
@@ -75,104 +76,87 @@ export function NetworkTopology({ events, onSelectNode }: Props) {
 
   return (
     <div className="relative w-full h-full">
-      <div className="absolute top-2 left-3 text-[9px] font-mono text-slate-600 uppercase tracking-widest">
-        Network Topology · 20 nodes
+      <div className="absolute top-0 left-0 text-[9px] font-mono text-slate-600 uppercase tracking-widest z-10">
+        Network Topology · 3-Tier · 20 Nodes
       </div>
 
-      {/* Legend */}
-      <div className="absolute bottom-2 left-3 flex items-center gap-3 text-[9px] font-mono text-slate-600">
-        {(["healthy","MEDIUM","HIGH","CRITICAL"] as const).map((s) => (
-          <span key={s} className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full inline-block" style={{ background: SEV_COLOR[s] }} />
-            {s}
+      <div className="absolute bottom-0 left-0 flex items-center gap-3 text-[9px] font-mono text-slate-600 z-10">
+        {LEGEND.map((item) => (
+          <span key={item.label} className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full inline-block" style={{ background: item.color }} />
+            {item.label}
           </span>
         ))}
       </div>
 
-      <svg
-        viewBox="0 0 750 320"
-        className="w-full h-full"
-        style={{ overflow: "visible" }}
-      >
-        {/* Subtle grid */}
+      <svg viewBox="0 0 750 320" className="w-full h-full" style={{ overflow: "visible" }}>
         <defs>
-          <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+          <pattern id="topo-grid" width="32" height="32" patternUnits="userSpaceOnUse">
             <path d="M 32 0 L 0 0 0 32" fill="none" stroke="#1a2d4a" strokeWidth="0.5" opacity="0.4"/>
           </pattern>
-          <filter id="glow-green"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-          <filter id="glow-red"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-          <filter id="glow-orange"><feGaussianBlur stdDeviation="2.5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
         </defs>
 
-        <rect width="750" height="320" fill="url(#grid)" rx="8" />
+        <rect width="750" height="320" fill="url(#topo-grid)" rx="8" />
+
+        {/* Tier labels */}
+        <text x="10" y="66"  fontSize="8" fill="#3b82f655" fontFamily="monospace">CORE</text>
+        <text x="10" y="166" fontSize="8" fill="#8b5cf655" fontFamily="monospace">EDGE</text>
+        <text x="10" y="276" fontSize="8" fill="#06b6d455" fontFamily="monospace">DIST</text>
 
         {/* Edges */}
         {EDGES.map(([a, b]) => {
           const na = NODE_LAYOUT[a];
           const nb = NODE_LAYOUT[b];
           if (!na || !nb) return null;
-          const sevA = nodeStatus[a];
-          const sevB = nodeStatus[b];
-          const hot = sevA === "CRITICAL" || sevB === "CRITICAL";
-          const warm = sevA === "HIGH" || sevB === "HIGH";
+          const sevA = nodeStatus[a] ?? "healthy";
+          const sevB = nodeStatus[b] ?? "healthy";
+          const isCritPath = sevA === "CRITICAL" || sevB === "CRITICAL";
+          const isHotPath  = sevA === "HIGH" || sevB === "HIGH";
           return (
             <line
               key={`${a}-${b}`}
               x1={na.x} y1={na.y} x2={nb.x} y2={nb.y}
-              stroke={hot ? "#ef444433" : warm ? "#f9731622" : "#1e3358"}
-              strokeWidth={hot ? 1.5 : 1}
-              strokeDasharray={hot ? "4 2" : undefined}
+              stroke={isCritPath ? "#ef444433" : isHotPath ? "#f9731622" : "#1e3358"}
+              strokeWidth={isCritPath ? 1.5 : 1}
+              strokeDasharray={isCritPath ? "4 2" : undefined}
             />
           );
         })}
 
-        {/* Tier labels */}
-        <text x="10" y="66"  className="font-mono" fontSize="8" fill="#3b82f666">CORE</text>
-        <text x="10" y="166" className="font-mono" fontSize="8" fill="#8b5cf666">EDGE</text>
-        <text x="10" y="276" className="font-mono" fontSize="8" fill="#06b6d466">DIST</text>
-
         {/* Nodes */}
         {Object.entries(NODE_LAYOUT).map(([nodeId, pos]) => {
-          const sev = nodeStatus[nodeId] || "healthy";
-          const color = SEV_COLOR[sev as keyof typeof SEV_COLOR] || SEV_COLOR.healthy;
+          const sev = nodeStatus[nodeId] ?? "healthy";
+          const color = sevColor(sev);
           const ring = TIER_RING[pos.tier];
-          const isCritical = sev === "CRITICAL";
-          const shortLabel = nodeId.replace("node-", "").replace("-0", "-").replace("-10", "-10");
+          const isCrit = sev === "CRITICAL";
+          const isHigh = sev === "HIGH";
+          const rMain = isCrit ? 9 : 7;
+          const shortLabel = nodeId.replace("node-", "").replace(/-0(\d)$/, "-$1");
 
           return (
-            <g
-              key={nodeId}
-              className="cursor-pointer"
-              onClick={() => onSelectNode?.(nodeId)}
-            >
-              {/* Outer ring (tier color) */}
-              <circle cx={pos.x} cy={pos.y} r={isCritical ? 13 : 11}
-                fill="none" stroke={ring} strokeWidth="1" opacity="0.35" />
-              {/* Critical pulse ring */}
-              {isCritical && (
-                <circle cx={pos.x} cy={pos.y} r={16}
-                  fill="none" stroke={color} strokeWidth="1" opacity="0.25"
-                  style={{ animation: "node-pulse 1.5s infinite" }}
+            <g key={nodeId} className="cursor-pointer" onClick={() => onSelectNode?.(nodeId)}>
+              {/* Tier ring */}
+              <circle cx={pos.x} cy={pos.y} r={rMain + 4}
+                fill="none" stroke={ring} strokeWidth="1" opacity="0.3" />
+              {/* Pulse ring for critical */}
+              {isCrit && (
+                <circle cx={pos.x} cy={pos.y} r={rMain + 8}
+                  fill="none" stroke={color} strokeWidth="1" opacity="0.2"
+                  style={{ animation: "node-pulse 1.5s ease-in-out infinite" }}
                 />
               )}
-              {/* Main node circle */}
-              <circle
-                cx={pos.x} cy={pos.y} r={isCritical ? 9 : 7}
-                fill={`${color}22`}
+              {/* Fill */}
+              <circle cx={pos.x} cy={pos.y} r={rMain}
+                fill={`${color}1a`}
                 stroke={color}
-                strokeWidth={isCritical ? 2 : 1.5}
-                filter={isCritical ? "url(#glow-red)" : sev === "HIGH" ? "url(#glow-orange)" : sev === "LOW" || sev === "healthy" ? "url(#glow-green)" : undefined}
+                strokeWidth={isCrit ? 2 : 1.5}
+                opacity={isCrit || isHigh ? 1 : 0.8}
               />
               {/* Center dot */}
-              <circle cx={pos.x} cy={pos.y} r={isCritical ? 3 : 2} fill={color} />
+              <circle cx={pos.x} cy={pos.y} r={isCrit ? 3 : 2} fill={color} />
               {/* Label */}
-              <text
-                x={pos.x} y={pos.y + 22}
-                textAnchor="middle"
-                fontSize="7"
-                fill="#64748b"
-                fontFamily="JetBrains Mono, monospace"
-              >
+              <text x={pos.x} y={pos.y + 21} textAnchor="middle"
+                fontSize="7" fill="#475569" fontFamily="JetBrains Mono, monospace">
                 {shortLabel}
               </text>
             </g>
