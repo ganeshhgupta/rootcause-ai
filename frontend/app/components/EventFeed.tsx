@@ -4,21 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { createEventSource } from "@/lib/api";
 import type { LiveEvent, Severity } from "@/lib/types";
 
-const SEV_BADGE: Record<Severity, string> = {
-  LOW:      "sev-LOW",
-  MEDIUM:   "sev-MEDIUM",
-  HIGH:     "sev-HIGH",
-  CRITICAL: "sev-CRITICAL",
-};
-
-const ACTION_COLOR: Record<string, string> = {
-  reroute:  "text-blue-400",
-  throttle: "text-purple-400",
-  restart:  "text-amber-400",
+const SEV_COLORS: Record<Severity, string> = {
+  LOW: "#64748b", MEDIUM: "#f59e0b", HIGH: "#f97316", CRITICAL: "#ef4444",
 };
 
 interface Props {
-  onSelectEvent: (eventId: string) => void;
+  onSelectEvent: (id: string) => void;
   selectedEventId: string | null;
   onEventsUpdate: (events: LiveEvent[]) => void;
 }
@@ -27,8 +18,9 @@ export function EventFeed({ onSelectEvent, selectedEventId, onEventsUpdate }: Pr
   const [events, setEvents] = useState<LiveEvent[]>([]);
   const [connected, setConnected] = useState(false);
   const [filter, setFilter] = useState<Severity | "ALL">("ALL");
-  const onEventsRef = useRef(onEventsUpdate);
-  onEventsRef.current = onEventsUpdate;
+  const [search, setSearch] = useState("");
+  const cbRef = useRef(onEventsUpdate);
+  cbRef.current = onEventsUpdate;
 
   useEffect(() => {
     const es = createEventSource();
@@ -38,8 +30,8 @@ export function EventFeed({ onSelectEvent, selectedEventId, onEventsUpdate }: Pr
       try {
         const ev: LiveEvent = JSON.parse(e.data);
         setEvents((prev) => {
-          const next = [ev, ...prev].slice(0, 300);
-          onEventsRef.current(next);
+          const next = [ev, ...prev].slice(0, 500);
+          cbRef.current(next);
           return next;
         });
       } catch {}
@@ -47,129 +39,122 @@ export function EventFeed({ onSelectEvent, selectedEventId, onEventsUpdate }: Pr
     return () => es.close();
   }, []);
 
-  const visible = filter === "ALL" ? events : events.filter((e) => e.severity === filter);
+  const visible = events
+    .filter((e) => filter === "ALL" || e.severity === filter)
+    .filter((e) => !search || e.node_id.includes(search) || e.failure_type?.includes(search) || e.action_type?.includes(search));
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Table header bar */}
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <div className="flex items-center gap-3">
-          <div className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-emerald-400 animate-pulse" : "bg-red-500"}`} />
-          <span className="text-[10px] font-mono uppercase tracking-widest text-slate-500">
-            Live Event Log
-          </span>
-          <span className="text-[10px] font-mono text-slate-700">{events.length} events</span>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      {/* ── Toolbar (matches Image 6 Log Viewer header) ── */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderBottom: "1px solid var(--border)", flexWrap: "wrap" }}>
+        {/* Search */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, background: "var(--bg)", border: "1px solid var(--border2)", borderRadius: 6, padding: "4px 10px", flex: 1, minWidth: 120 }}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input
+            value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Filter by node, type, action..."
+            style={{ background: "none", border: "none", outline: "none", fontSize: 11, color: "var(--text2)", width: "100%" }}
+          />
         </div>
 
-        {/* Severity filter */}
-        <div className="flex items-center gap-1">
+        {/* Severity filter pills */}
+        <div style={{ display: "flex", gap: 4 }}>
           {(["ALL","LOW","MEDIUM","HIGH","CRITICAL"] as const).map((s) => (
-            <button
-              key={s}
-              onClick={() => setFilter(s)}
-              className={`text-[9px] font-mono px-2 py-0.5 rounded border transition-colors ${
-                filter === s
-                  ? "bg-slate-700 border-slate-500 text-slate-200"
-                  : "border-[#1a2d4a] text-slate-600 hover:text-slate-400"
-              }`}
-            >
+            <button key={s} onClick={() => setFilter(s)} style={{
+              fontSize: 9, fontFamily: "JetBrains Mono", fontWeight: 600, padding: "3px 8px",
+              borderRadius: 4, border: "1px solid", cursor: "pointer",
+              color: filter === s ? (s === "ALL" ? "#e2eaf5" : SEV_COLORS[s as Severity]) : "var(--text3)",
+              background: filter === s ? (s === "ALL" ? "rgba(79,142,247,0.1)" : `${SEV_COLORS[s as Severity]}15`) : "transparent",
+              borderColor: filter === s ? (s === "ALL" ? "rgba(79,142,247,0.3)" : `${SEV_COLORS[s as Severity]}40`) : "var(--border)",
+            }}>
               {s}
             </button>
           ))}
         </div>
-      </div>
 
-      {/* Column headers */}
-      <div className="grid grid-cols-[80px_120px_72px_68px_64px_72px_100px_1fr_80px] gap-x-2 px-3 py-1.5 border-b border-[#1a2d4a] text-[9px] font-mono text-slate-600 uppercase tracking-widest">
-        <span>Time</span>
-        <span>Node</span>
-        <span>Severity</span>
-        <span>Latency</span>
-        <span>Loss%</span>
-        <span>Score</span>
-        <span>Action</span>
-        <span>Diagnosis</span>
-        <span>Status</span>
-      </div>
-
-      {/* Rows */}
-      <div className="flex-1 overflow-y-auto">
-        {visible.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-slate-700 gap-2">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
-              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-            </svg>
-            <span className="text-[11px] font-mono">
-              {connected ? "No events match filter" : "Waiting for backend connection..."}
-            </span>
-          </div>
-        )}
-        {visible.map((ev, i) => (
-          <EventRow
-            key={`${ev.event_id}-${i}`}
-            event={ev}
-            selected={ev.event_id === selectedEventId}
-            onClick={() => ev.event_id && onSelectEvent(ev.event_id)}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function EventRow({ event: ev, selected, onClick }: {
-  event: LiveEvent;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  const pct = Math.round(ev.anomaly_score * 100);
-  const barColor =
-    ev.severity === "CRITICAL" ? "#ef4444" :
-    ev.severity === "HIGH" ? "#f97316" :
-    ev.severity === "MEDIUM" ? "#eab308" : "#475569";
-
-  return (
-    <div
-      onClick={onClick}
-      className={`trow grid grid-cols-[80px_120px_72px_68px_64px_72px_100px_1fr_80px] gap-x-2 px-3 py-2 border-b border-[#111d30] cursor-pointer animate-slide-in ${
-        selected ? "bg-amber-950/20 border-l-2 border-l-amber-500/60" : ""
-      }`}
-    >
-      {/* Time */}
-      <span className="font-mono text-[10px] text-slate-600">
-        {new Date(ev.timestamp).toLocaleTimeString("en-US", { hour12: false })}
-      </span>
-      {/* Node */}
-      <span className="font-mono text-[11px] text-slate-300 truncate">{ev.node_id}</span>
-      {/* Severity badge */}
-      <span className={`inline-flex items-center text-[9px] font-bold px-1.5 rounded w-fit h-fit ${SEV_BADGE[ev.severity]}`}>
-        {ev.severity}
-      </span>
-      {/* Latency — not in SSE payload so show dash */}
-      <span className="font-mono text-[10px] text-slate-500">—</span>
-      {/* Loss */}
-      <span className="font-mono text-[10px] text-slate-500">—</span>
-      {/* Anomaly score bar */}
-      <div className="flex items-center gap-1.5">
-        <div className="flex-1 h-1 bg-[#1a2d4a] rounded-full overflow-hidden">
-          <div className="h-full rounded-full" style={{ width: `${pct}%`, background: barColor }} />
+        {/* Connection status */}
+        <div style={{ display: "flex", alignItems: "center", gap: 5, marginLeft: 4 }}>
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: connected ? "var(--green)" : "var(--red)", display: "inline-block", animation: connected ? "blink 2s infinite" : "none" }} />
+          <span style={{ fontSize: 9, fontFamily: "JetBrains Mono", color: connected ? "var(--green)" : "var(--red)" }}>
+            {connected ? "STREAMING" : "OFFLINE"}
+          </span>
+          <span style={{ fontSize: 9, color: "var(--text3)", marginLeft: 6 }}>{events.length} events</span>
         </div>
-        <span className="font-mono text-[9px] text-slate-600 w-6 text-right">{pct}%</span>
       </div>
-      {/* Action */}
-      <span className={`font-mono text-[10px] capitalize ${ACTION_COLOR[ev.action_type] ?? "text-slate-600"}`}>
-        {ev.action_type || "—"}
-      </span>
-      {/* Diagnosis */}
-      <span className="text-[10px] text-slate-600 truncate">{ev.diagnosis_summary || "—"}</span>
-      {/* Status */}
-      {ev.requires_approval ? (
-        <span className="font-mono text-[9px] text-amber-400 border border-amber-700/40 px-1 rounded w-fit">ACK REQ</span>
-      ) : ev.action_type ? (
-        <span className="font-mono text-[9px] text-emerald-400">AUTO</span>
-      ) : (
-        <span className="font-mono text-[9px] text-slate-700">—</span>
-      )}
+
+      {/* ── Table ── */}
+      <div style={{ flex: 1, overflowY: "auto" }}>
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th style={{ width: 24 }}>#</th>
+              <th>Timestamp</th>
+              <th>Node</th>
+              <th>Severity</th>
+              <th>Latency</th>
+              <th>Loss %</th>
+              <th>Throughput</th>
+              <th>Score</th>
+              <th>Failure Type</th>
+              <th>Action</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.length === 0 && (
+              <tr>
+                <td colSpan={11} style={{ textAlign: "center", padding: 40, color: "var(--text3)" }}>
+                  {connected ? "No events match the current filter" : "Waiting for backend connection…"}
+                </td>
+              </tr>
+            )}
+            {visible.slice(0, 200).map((ev, i) => {
+              const color = SEV_COLORS[ev.severity];
+              const pct = Math.round(ev.anomaly_score * 100);
+              const isSelected = ev.event_id === selectedEventId;
+              return (
+                <tr key={`${ev.event_id}-${i}`} className={isSelected ? "selected" : ""} onClick={() => ev.event_id && onSelectEvent(ev.event_id)}>
+                  <td className="mono" style={{ color: "var(--text3)", fontSize: 9 }}>{String(i + 1).padStart(2, "0")}</td>
+                  <td className="mono" style={{ fontSize: 10 }}>{new Date(ev.timestamp).toLocaleTimeString("en-US", { hour12: false })}</td>
+                  <td><span style={{ color: "var(--text1)", fontWeight: 500 }}>{ev.node_id}</span></td>
+                  <td><span className={`badge badge-${ev.severity}`}>{ev.severity}</span></td>
+                  <td className="mono" style={{ color: ev.latency_ms > 100 ? "var(--orange)" : "var(--text2)" }}>
+                    {ev.latency_ms?.toFixed(0) ?? "—"} ms
+                  </td>
+                  <td className="mono" style={{ color: ev.packet_loss_pct > 1 ? "var(--red)" : "var(--text2)" }}>
+                    {ev.packet_loss_pct?.toFixed(2) ?? "—"}%
+                  </td>
+                  <td className="mono" style={{ color: ev.throughput_mbps < 400 ? "var(--amber)" : "var(--text2)" }}>
+                    {ev.throughput_mbps?.toFixed(0) ?? "—"} Mbps
+                  </td>
+                  <td style={{ minWidth: 80 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      <div className="score-bar" style={{ width: 44 }}>
+                        <div className="score-fill" style={{ width: `${pct}%`, background: color }} />
+                      </div>
+                      <span className="mono" style={{ fontSize: 9, color: "var(--text3)" }}>{pct}%</span>
+                    </div>
+                  </td>
+                  <td style={{ color: "var(--text2)" }}>{ev.failure_type?.replace(/_/g, " ") || "—"}</td>
+                  <td>
+                    <span style={{ fontSize: 10, color: ev.action_type === "reroute" ? "#4f8ef7" : ev.action_type === "throttle" ? "#818cf8" : ev.action_type === "restart" ? "#f59e0b" : "var(--text3)" }}>
+                      {ev.action_type || "—"}
+                    </span>
+                  </td>
+                  <td>
+                    {ev.requires_approval
+                      ? <span style={{ fontSize: 9, color: "#f59e0b", fontFamily: "JetBrains Mono", border: "1px solid #f59e0b40", padding: "1px 5px", borderRadius: 3 }}>ACK REQ</span>
+                      : ev.action_type
+                        ? <span style={{ fontSize: 9, color: "var(--green)", fontFamily: "JetBrains Mono" }}>AUTO</span>
+                        : <span style={{ fontSize: 9, color: "var(--text3)" }}>—</span>
+                    }
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

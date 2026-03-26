@@ -6,131 +6,139 @@ import type { EventTrace, AgentDecision } from "@/lib/types";
 
 interface Props { eventId: string | null; }
 
-const AGENTS = [
-  { key: "monitor_decision" as const,     label: "Monitor Agent",     color: "#3b82f6", sym: "◎" },
-  { key: "diagnosis_decision" as const,   label: "Diagnosis Agent",   color: "#8b5cf6", sym: "⬡" },
-  { key: "remediation_decision" as const, label: "Remediation Agent", color: "#f59e0b", sym: "⚡" },
+const STEPS = [
+  { key: "monitor_decision" as const,     label: "Monitor Agent",     color: "#4f8ef7", icon: "◎", step: 1 },
+  { key: "diagnosis_decision" as const,   label: "Diagnosis Agent",   color: "#818cf8", icon: "⬡", step: 2 },
+  { key: "remediation_decision" as const, label: "Remediation Agent", color: "#f59e0b", icon: "⚡", step: 3 },
 ];
 
 export function AgentTrace({ eventId }: Props) {
   const [trace, setTrace] = useState<EventTrace | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState<number | null>(null);
 
   useEffect(() => {
     if (!eventId) { setTrace(null); return; }
     setLoading(true);
-    setError(null);
     getTrace(eventId)
       .then(setTrace)
-      .catch((e) => setError(e.message))
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, [eventId]);
 
+  if (!eventId) return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text3)", fontSize: 11 }}>
+      ← Click a row to inspect the agent trace
+    </div>
+  );
+
   if (loading) return (
-    <div className="flex items-center gap-2 text-slate-600 text-[11px] font-mono py-4">
-      <span className="w-3 h-3 border border-slate-700 border-t-slate-400 rounded-full animate-spin" />
-      Loading trace...
+    <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text3)", padding: 20, fontSize: 11, fontFamily: "JetBrains Mono" }}>
+      <span style={{ width: 12, height: 12, border: "2px solid var(--border2)", borderTop: "2px solid var(--accent)", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} />
+      Loading trace for {eventId.slice(0, 8)}…
     </div>
   );
-  if (error) return <div className="text-red-400 text-[11px] font-mono">Error: {error}</div>;
-  if (!trace) return null;
+
+  if (!trace) return (
+    <div style={{ color: "var(--text3)", padding: 20, fontSize: 11 }}>No trace found</div>
+  );
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_1fr_200px] gap-3">
-      {AGENTS.map((agent, i) => {
-        const d = trace[agent.key] as AgentDecision | null;
-        return (
-          <AgentCard key={agent.key} agent={agent} decision={d} step={i + 1} />
-        );
-      })}
-
-      {/* Execution / HITL result */}
-      <div className="card-sm p-3">
-        <div className="text-[9px] font-mono uppercase tracking-widest mb-2"
-          style={{ color: trace.execution_result ? "#10b981" : "#f59e0b" }}>
-          {trace.execution_result ? "✓ Executed" : "⏱ Awaiting"}
-        </div>
-        {trace.execution_result ? (
-          <div className="space-y-1 text-[9px] font-mono">
-            <div className="flex justify-between">
-              <span className="text-slate-600">success</span>
-              <span className={trace.execution_result.success ? "text-emerald-400" : "text-red-400"}>
-                {String(trace.execution_result.success)}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600">code</span>
-              <span className="text-slate-400">{String(trace.execution_result.response_code ?? "—")}</span>
-            </div>
-            <div className="text-slate-700 text-[8px] mt-1 truncate">
-              {String(trace.execution_result.message ?? "")}
-            </div>
+    <div style={{ height: "100%", overflowY: "auto", padding: "12px 14px" }}>
+      {/* Event summary bar */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8, marginBottom: 14 }}>
+        {[
+          { label: "Node",       value: trace.event.node_id },
+          { label: "Latency",    value: `${trace.event.latency_ms?.toFixed(0)} ms` },
+          { label: "Loss",       value: `${trace.event.packet_loss_pct?.toFixed(2)}%` },
+          { label: "Throughput", value: `${trace.event.throughput_mbps?.toFixed(0)} Mbps` },
+          { label: "Score",      value: `${(trace.event.anomaly_score * 100).toFixed(0)}%` },
+          { label: "Pipeline",   value: `${trace.total_latency_ms} ms total` },
+        ].map((m) => (
+          <div key={m.label} style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px" }}>
+            <div style={{ fontSize: 8, color: "var(--text3)", fontFamily: "JetBrains Mono", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 2 }}>{m.label}</div>
+            <div style={{ fontSize: 12, fontFamily: "JetBrains Mono", color: "var(--text1)", fontWeight: 600 }}>{m.value}</div>
           </div>
-        ) : (
-          <div className="text-[10px] text-amber-600/60 font-mono">
-            Human approval required before execution.
-          </div>
-        )}
-        <div className="mt-2 pt-2 border-t border-[#1a2d4a] text-[9px] font-mono text-slate-700">
-          Total: {trace.total_latency_ms}ms
-        </div>
+        ))}
       </div>
-    </div>
-  );
-}
 
-function AgentCard({ agent, decision, step }: {
-  agent: { label: string; color: string; sym: string };
-  decision: AgentDecision | null;
-  step: number;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="card-sm p-3">
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-2">
-        <span style={{ color: agent.color }} className="text-base">{agent.sym}</span>
-        <div>
-          <div className="text-[9px] text-slate-600 font-mono">STEP {step}</div>
-          <div className="text-[11px] font-semibold" style={{ color: agent.color }}>{agent.label}</div>
-        </div>
-        {decision && (
-          <div className="ml-auto text-right">
-            <div className="text-[9px] font-mono text-slate-500">{decision.latency_ms}ms</div>
-            {decision.token_count && (
-              <div className="text-[8px] font-mono text-slate-700">{decision.token_count} tok</div>
+      {/* Pipeline steps */}
+      <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
+        {STEPS.map((agent, i) => {
+          const d = trace[agent.key] as AgentDecision | null;
+          const isOpen = open === i;
+          return (
+            <div key={agent.key} style={{ flex: 1, border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden" }}>
+              {/* Step header */}
+              <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--border)", background: `${agent.color}08`, display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }} onClick={() => setOpen(isOpen ? null : i)}>
+                <span style={{ color: agent.color, fontSize: 16 }}>{agent.icon}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 9, color: "var(--text3)", fontFamily: "JetBrains Mono" }}>STEP {agent.step}</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: agent.color }}>{agent.label}</div>
+                </div>
+                {d && (
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 10, fontFamily: "JetBrains Mono", color: "var(--text2)" }}>{d.latency_ms}ms</div>
+                    {d.token_count && <div style={{ fontSize: 9, color: "var(--text3)", fontFamily: "JetBrains Mono" }}>{d.token_count} tok</div>}
+                  </div>
+                )}
+              </div>
+
+              {/* Step body */}
+              <div style={{ padding: "10px 12px" }}>
+                {d ? (
+                  <>
+                    {Object.entries(d.output_state).slice(0, 5).map(([k, v]) => (
+                      <div key={k} style={{ display: "flex", gap: 8, marginBottom: 4 }}>
+                        <span style={{ fontSize: 9, color: "var(--text3)", fontFamily: "JetBrains Mono", minWidth: 80, textTransform: "uppercase" }}>{k}</span>
+                        <span style={{ fontSize: 10, color: "var(--text2)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {typeof v === "object" ? JSON.stringify(v) : String(v)}
+                        </span>
+                      </div>
+                    ))}
+                    <button onClick={() => setOpen(isOpen ? null : i)} style={{ fontSize: 9, color: "var(--text3)", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: 4, fontFamily: "JetBrains Mono" }}>
+                      {isOpen ? "▲ collapse" : "▼ expand"}
+                    </button>
+                    {isOpen && (
+                      <pre style={{ marginTop: 8, fontSize: 9, fontFamily: "JetBrains Mono", color: "var(--text2)", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 4, padding: 8, overflow: "auto", maxHeight: 120 }}>
+                        {JSON.stringify(d.output_state, null, 2)}
+                      </pre>
+                    )}
+                  </>
+                ) : (
+                  <span style={{ fontSize: 10, color: "var(--text3)" }}>Not executed</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Result panel */}
+        <div style={{ width: 160, border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden" }}>
+          <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--border)", background: trace.execution_result ? "#22c55e08" : "#f59e0b08" }}>
+            <div style={{ fontSize: 9, color: "var(--text3)", fontFamily: "JetBrains Mono" }}>STEP 4</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: trace.execution_result ? "var(--green)" : "var(--amber)" }}>
+              {trace.execution_result ? "Executed" : "Pending"}
+            </div>
+          </div>
+          <div style={{ padding: "10px 12px", fontSize: 10, color: "var(--text2)" }}>
+            {trace.execution_result ? (
+              <div style={{ fontFamily: "JetBrains Mono" }}>
+                <div style={{ color: trace.execution_result.success ? "var(--green)" : "var(--red)", marginBottom: 4 }}>
+                  {trace.execution_result.success ? "✓ SUCCESS" : "✕ FAILED"}
+                </div>
+                <div style={{ fontSize: 9, color: "var(--text3)", wordBreak: "break-all" }}>
+                  {String(trace.execution_result.message ?? "").slice(0, 80)}
+                </div>
+              </div>
+            ) : (
+              <div style={{ fontSize: 10, color: "var(--amber)", fontFamily: "JetBrains Mono" }}>
+                Awaiting operator approval
+              </div>
             )}
           </div>
-        )}
+        </div>
       </div>
-
-      {decision ? (
-        <>
-          {/* Key output values */}
-          <div className="space-y-0.5 text-[9px] font-mono mb-2">
-            {Object.entries(decision.output_state).slice(0, 4).map(([k, v]) => (
-              <div key={k} className="flex gap-2">
-                <span className="text-slate-600 shrink-0">{k}</span>
-                <span className="text-slate-400 truncate">{typeof v === "object" ? JSON.stringify(v) : String(v)}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Expand toggle */}
-          <button onClick={() => setOpen(!open)}
-            className="text-[8px] font-mono text-slate-700 hover:text-slate-500">
-            {open ? "▲ less" : "▼ full output"}
-          </button>
-          {open && (
-            <pre className="mt-2 text-[8px] font-mono text-slate-600 bg-[#050a14] rounded p-2 overflow-auto max-h-28">
-              {JSON.stringify(decision.output_state, null, 2)}
-            </pre>
-          )}
-        </>
-      ) : (
-        <div className="text-[9px] text-slate-700 font-mono">No decision recorded</div>
-      )}
     </div>
   );
 }

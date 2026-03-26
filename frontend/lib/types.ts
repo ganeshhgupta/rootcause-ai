@@ -3,9 +3,16 @@ export type Severity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 export interface LiveEvent {
   event_id: string;
   node_id: string;
+  latency_ms: number;
+  packet_loss_pct: number;
+  throughput_mbps: number;
   severity: Severity;
   anomaly_score: number;
+  flags: string[];
+  description: string;
   diagnosis_summary: string;
+  failure_type: string;
+  confidence: number;
   action_type: string;
   requires_approval: boolean;
   thread_id: string;
