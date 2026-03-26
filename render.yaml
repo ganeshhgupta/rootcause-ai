@@ -24,7 +24,7 @@ services:
       - key: ANOMALY_HITL_THRESHOLD
         value: "0.8"
       - key: ALLOWED_ORIGINS
-        value: "https://rootcause-ai.vercel.app"
+        value: "*"
 
   - type: web
     name: rootcause-simulator

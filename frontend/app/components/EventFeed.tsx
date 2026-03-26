@@ -14,21 +14,66 @@ interface Props {
   onEventsUpdate: (events: LiveEvent[]) => void;
 }
 
+type ConnState = "connecting" | "warming" | "streaming" | "offline";
+
 export function EventFeed({ onSelectEvent, selectedEventId, onEventsUpdate }: Props) {
   const [events, setEvents] = useState<LiveEvent[]>([]);
-  const [connected, setConnected] = useState(false);
+  const [connState, setConnState] = useState<ConnState>("connecting");
+  const [retryIn, setRetryIn] = useState(0);
   const [filter, setFilter] = useState<Severity | "ALL">("ALL");
   const [search, setSearch] = useState("");
   const cbRef = useRef(onEventsUpdate);
   cbRef.current = onEventsUpdate;
+  const esRef = useRef<EventSource | null>(null);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryDelay = useRef(3000);
+  const destroyed = useRef(false);
 
-  useEffect(() => {
-    const es = createEventSource();
-    es.onopen = () => setConnected(true);
-    es.onerror = () => setConnected(false);
+  const connect = () => {
+    if (destroyed.current) return;
+    setConnState("connecting");
+    const es = new EventSource(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/events/stream`);
+    esRef.current = es;
+
+    const warmupTimeout = setTimeout(() => {
+      if (es.readyState !== EventSource.OPEN) setConnState("warming");
+    }, 4000);
+
+    es.onopen = () => {
+      clearTimeout(warmupTimeout);
+      retryDelay.current = 3000;
+      setConnState("streaming");
+      setRetryIn(0);
+    };
+
+    es.onerror = () => {
+      clearTimeout(warmupTimeout);
+      es.close();
+      if (destroyed.current) return;
+      setConnState("offline");
+      // Exponential backoff: 3s → 6s → 12s → 30s cap
+      const delay = Math.min(retryDelay.current, 30000);
+      retryDelay.current = Math.min(delay * 2, 30000);
+      setRetryIn(Math.round(delay / 1000));
+
+      let remaining = Math.round(delay / 1000);
+      const tick = setInterval(() => {
+        remaining -= 1;
+        setRetryIn(remaining);
+        if (remaining <= 0) clearInterval(tick);
+      }, 1000);
+
+      retryTimer.current = setTimeout(() => {
+        clearInterval(tick);
+        connect();
+      }, delay);
+    };
+
     es.onmessage = (e) => {
+      if (e.data === "" || e.data === "keepalive") return;
       try {
         const ev: LiveEvent = JSON.parse(e.data);
+        setConnState("streaming");
         setEvents((prev) => {
           const next = [ev, ...prev].slice(0, 500);
           cbRef.current(next);
@@ -36,8 +81,19 @@ export function EventFeed({ onSelectEvent, selectedEventId, onEventsUpdate }: Pr
         });
       } catch {}
     };
-    return () => es.close();
-  }, []);
+  };
+
+  useEffect(() => {
+    destroyed.current = false;
+    connect();
+    return () => {
+      destroyed.current = true;
+      esRef.current?.close();
+      if (retryTimer.current) clearTimeout(retryTimer.current);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const connected = connState === "streaming";
 
   const visible = events
     .filter((e) => filter === "ALL" || e.severity === filter)
@@ -74,9 +130,13 @@ export function EventFeed({ onSelectEvent, selectedEventId, onEventsUpdate }: Pr
 
         {/* Connection status */}
         <div style={{ display: "flex", alignItems: "center", gap: 5, marginLeft: 4 }}>
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: connected ? "var(--green)" : "var(--red)", display: "inline-block", animation: connected ? "blink 2s infinite" : "none" }} />
-          <span style={{ fontSize: 9, fontFamily: "JetBrains Mono", color: connected ? "var(--green)" : "var(--red)" }}>
-            {connected ? "STREAMING" : "OFFLINE"}
+          <span style={{
+            width: 6, height: 6, borderRadius: "50%", display: "inline-block",
+            background: connState === "streaming" ? "var(--green)" : connState === "warming" || connState === "connecting" ? "var(--amber)" : "var(--red)",
+            animation: connState === "streaming" ? "blink 2s infinite" : connState !== "offline" ? "blink 0.6s infinite" : "none",
+          }} />
+          <span style={{ fontSize: 9, fontFamily: "JetBrains Mono", color: connState === "streaming" ? "var(--green)" : connState === "warming" || connState === "connecting" ? "var(--amber)" : "var(--red)" }}>
+            {connState === "streaming" ? "STREAMING" : connState === "warming" ? "WARMING UP…" : connState === "connecting" ? "CONNECTING…" : retryIn > 0 ? `RETRY IN ${retryIn}s` : "RECONNECTING…"}
           </span>
           <span style={{ fontSize: 9, color: "var(--text3)", marginLeft: 6 }}>{events.length} events</span>
         </div>
@@ -104,7 +164,11 @@ export function EventFeed({ onSelectEvent, selectedEventId, onEventsUpdate }: Pr
             {visible.length === 0 && (
               <tr>
                 <td colSpan={11} style={{ textAlign: "center", padding: 40, color: "var(--text3)" }}>
-                  {connected ? "No events match the current filter" : "Waiting for backend connection…"}
+                  {connState === "streaming" ? "No events match the current filter"
+                    : connState === "warming" ? "Backend warming up — Render free tier cold start (~30s)…"
+                    : connState === "connecting" ? "Connecting to backend…"
+                    : retryIn > 0 ? `Backend offline — retrying in ${retryIn}s…`
+                    : "Reconnecting…"}
                 </td>
               </tr>
             )}
