@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 
 // ─── Canvas particle network background ──────────────────────────────────────
@@ -115,7 +115,7 @@ function NetworkCanvas() {
 }
 
 // ─── Scroll fade-in wrapper ───────────────────────────────────────────────────
-function FadeIn({ children, delay = 0, up = true }: { children: React.ReactNode; delay?: number; up?: boolean }) {
+function FadeIn({ children, delay = 0, up = true }: { children: ReactNode; delay?: number; up?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [v, setV] = useState(false);
 

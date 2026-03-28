@@ -1,4 +1,6 @@
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+import type { ReactNode } from "react";
+
+export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <div style={{ background: "var(--bg)", minHeight: "100vh" }}>
       {/* ── Top nav ── */}
