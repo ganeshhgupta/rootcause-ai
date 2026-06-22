@@ -6,6 +6,17 @@ The goal of this project is simple. Take raw network signals and turn them into 
 
 ---
 
+## Live Demo
+
+| Service | URL |
+|---------|-----|
+| Dashboard | [rootcause-ai.vercel.app](https://rootcause-ai.vercel.app) |
+| Backend API | [rootcause-backend.onrender.com](https://rootcause-backend.onrender.com) |
+
+> Note: the Render backend is on a free tier — it may take ~30s to wake up on first request.
+
+---
+
 ## What this system does
 
 At a high level, the system continuously ingests network events, analyzes them, and decides what to do next.
